@@ -1,2 +1,2 @@
 # pytorch_ext
-Extension modules for Pytorch
+A bunch of utility modules to simplify PyTorch model training
