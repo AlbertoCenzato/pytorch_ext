@@ -6,7 +6,7 @@ from typing import Tuple, Union
 
 import torch
 
-from visdom_board import get_visdom_manager
+from ..visdom_board import get_visdom_manager
 from .model_trainer import TrainingCallback, BatchTrainingCallback
 
 

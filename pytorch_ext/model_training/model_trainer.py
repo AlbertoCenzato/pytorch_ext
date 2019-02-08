@@ -8,7 +8,7 @@ from torch.nn import Module
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
-import visdom_board
+from ..visdom_board import get_visdom_manager
 
 
 def call_all(callables: List[Callable]) -> None:
@@ -103,7 +103,7 @@ class ModelTrainer:
         self.post_training_actions = []
 
         # initialize VisdomBoard tools
-        self.vm = visdom_board.get_visdom_manager()
+        self.vm = get_visdom_manager()
         self.vm.close_all()
 
         with self.vm.environment('Training'):
