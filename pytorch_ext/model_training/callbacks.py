@@ -50,13 +50,13 @@ class RNNCurriculumLearningTrainer(BatchTrainingCallback):
             self.moving_sum = 0.0
 
         def append(self, elem: Union[int, float]) -> None:
-            if len(self.past_losses) >= self.max_len:
+            if len(self.past_elements) >= self.max_len:
                 self.moving_sum -= self.past_elements.popleft()
             self.moving_sum += elem
-            self.past_losses.append(elem)
+            self.past_elements.append(elem)
 
         def get(self) -> float:
-            return self.moving_sum / len(self.past_losses)
+            return self.moving_sum / len(self.past_elements)
 
         def full(self) -> bool:
             return len(self) == self.max_len
