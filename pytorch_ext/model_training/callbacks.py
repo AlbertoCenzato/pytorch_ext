@@ -1,7 +1,8 @@
 import random
 import time
 import datetime
-from typing import Tuple
+from collections import deque
+from typing import Tuple, Union
 
 import torch
 
@@ -41,15 +42,39 @@ class RNNStepByStepTrainer(BatchTrainingCallback):
 class RNNCurriculumLearningTrainer(BatchTrainingCallback):
     """
     """
+    class MovingAverage:
 
-    UNDER_THRESHOLD_BATCHES = 20
+        def __init__(self, max_len: int):
+            self.max_len = max_len
+            self.past_elements = deque()
+            self.moving_sum = 0.0
 
-    def __init__(self, threshold: float, max_predicted_frames: int):
+        def append(self, elem: Union[int, float]) -> None:
+            if len(self.past_losses) >= self.max_len:
+                self.moving_sum -= self.past_elements.popleft()
+            self.moving_sum += elem
+            self.past_losses.append(elem)
+
+        def get(self) -> float:
+            return self.moving_sum / len(self.past_losses)
+
+        def full(self) -> bool:
+            return len(self) == self.max_len
+
+        def __len__(self) -> int:
+            return len(self.past_elements)
+
+    def __init__(self, threshold: float, max_predicted_frames: int,
+                 max_under_threshold_batches: int=50):
         super(RNNCurriculumLearningTrainer, self).__init__()
         self.threshold = threshold
         self.max_predicted_frames = max_predicted_frames
         self.n_of_predicted_frames = 1
+
         self.under_threshold_batches = 0
+        self.max_under_threshold_batches = max_under_threshold_batches
+
+        self.moving_average = RNNCurriculumLearningTrainer.MovingAverage(self.max_under_threshold_batches)
 
     def __call__(self, data_batch: torch.Tensor) -> torch.Tensor:
         # using data.size(0) instead of self.batch_size because 
@@ -75,16 +100,14 @@ class RNNCurriculumLearningTrainer(BatchTrainingCallback):
         return sequence_loss
 
     def _raise_difficulty(self, loss: float) -> None:
-        # if the loss of this sequence is lower than a fixed threshold
-        # increase task difficulty
-        if loss < self.threshold and self.n_of_predicted_frames < self.max_predicted_frames:
-            self.under_threshold_batches += 1
-            if self.under_threshold_batches > RNNCurriculumLearningTrainer.UNDER_THRESHOLD_BATCHES:
-                self.n_of_predicted_frames += 1
-                print('Loss has been < {} for {} batches: raising difficulty'
-                      .format(self.threshold, RNNCurriculumLearningTrainer.UNDER_THRESHOLD_BATCHES))
-        else:
-            self.under_threshold_batches = 0
+        if self.moving_average.full():
+            average = self.moving_average.get()
+            if average - self.threshold <= loss <= average + self.threshold:
+                self.n_of_predicted_frames = min(self.n_of_predicted_frames + 1, self.max_predicted_frames)
+                print('Loss has not changed for {} batches: raising difficulty'
+                      .format(self.threshold, self.max_under_threshold_batches))
+
+        self.moving_average.append(loss)
 
     def _naive_curriculum_learning(self, buffering_frames: int, sequence_len: int) -> Tuple[int, int]:
         """ 
