@@ -104,7 +104,6 @@ class ModelTrainer:
 
         # initialize VisdomBoard tools
         self.vm = get_visdom_manager()
-        self.vm.close_all()
 
         with self.vm.environment('Training'):
             self._output_console = self.vm.get_output_console()
@@ -199,7 +198,10 @@ class ModelTrainer:
         training_data_len = len(self.training_data_loader)
         self.running_loss = 0.0
         for batch_index, data in enumerate(self.training_data_loader, 0):
-            data = data.to(self.device)
+            if torch.is_tensor(data):
+                data = data.to(self.device)
+            else:
+                data = [x.to(self.device) for x in data]
             
             call_all(self.pre_batch_actions)
 
