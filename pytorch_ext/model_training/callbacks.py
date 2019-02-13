@@ -166,3 +166,4 @@ class Checkpoint(TrainingCallback):
         if self.trainer.current_epoch % self.period == 0:
             model_path = os.path.join(self.checkpoint_dir, 'checkpoint_{}.pt'.format(self.checkpoint_counter))
             torch.save(self.trainer.model, model_path)
+            self.checkpoint_counter += 1
