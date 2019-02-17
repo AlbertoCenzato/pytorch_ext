@@ -8,7 +8,7 @@ import tempfile
 import subprocess
 
 import torch
-from torchvision import utils as torchvisutil
+import torchvision
 import visdom
 
 import plotly.graph_objs as go
@@ -126,7 +126,7 @@ def video_encode(tensor: torch.Tensor, fps: int) -> Tuple[str, tempfile.Temporar
     for t in range(L):
         file_name = ''.join([file_prefix, '{:04d}', file_extension]).format(t)
         file_path = os.path.join(dir.name, file_name)
-        torchvisutil.save_image(tensor[t, :], file_path, normalize=True)
+        torchvision.utils.save_image(tensor[t, :], file_path, normalize=True)
 
     ffmpeg_file_name_template = ''.join([file_prefix, '%4d', file_extension])
     ffmpeg_file_path = os.path.join(dir.name, ffmpeg_file_name_template)

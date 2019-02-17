@@ -11,7 +11,7 @@ from .model_trainer import TrainingCallback, BatchTrainingCallback
 
 class RNNSequenceTrainer(BatchTrainingCallback):
     """
-        Trains a recurrent model that receives as input the whole sequence
+    Trains a recurrent model that receives as input the whole sequence
     """
 
     def __call__(self, data_batch: torch.Tensor) -> torch.Tensor:
@@ -21,7 +21,7 @@ class RNNSequenceTrainer(BatchTrainingCallback):
 
 class RNNStepByStepTrainer(BatchTrainingCallback):
     """
-        Trains a recurrent model that receives as input a single time frame
+    Trains a recurrent model that receives as input a single time frame
     """
 
     def __call__(self, data_batch: torch.Tensor) -> torch.Tensor:
@@ -207,3 +207,40 @@ class TrainingTimeEstimation(TrainingCallback):
             self.console.print('ETA: {}'.format(time_delta))
 
             self.epoch_start_time = end
+
+
+class BatchStatistics(TrainingCallback):
+    """
+    Post-batch callback that plots the training loss
+    """
+
+    def __init__(self, period: int):
+        """
+        :param period: plotting period expressed in number of batches
+        """
+        self.logging_period = period
+        self.running_loss = 0.0
+        self.dataset_size = 0
+
+        self.console   = None
+        self.loss_plot = None
+
+    def on_attach(self) -> None:
+        self.dataset_size = len(self.trainer.training_data_loader)
+        vm = self.trainer.vm
+        with vm.environment('Training'):
+            self.console   = vm.get_output_console()
+            self.loss_plot = vm.get_line_plot(title='Training loss',
+                                              xaxis='epochs',
+                                              yaxis='loss')
+
+    def __call__(self) -> None:
+        self.running_loss += self.trainer.last_batch_loss
+        batch = self.trainer.current_batch
+        epoch = self.trainer.current_epoch
+        if (batch % self.logging_period) == self.logging_period-1:  # print every time one-tenth of the dataset has been processed
+            mean_loss = self.running_loss / self.logging_period  # print mean loss over the processed batches
+            self.console.print('[epoch: {:.0f}, batch: {:.0f}] - loss: {:.3f}'
+                               .format(epoch + 1, batch + 1, mean_loss))
+            self.loss_plot.append([epoch + batch / self.dataset_size], [mean_loss])
+            self.running_loss = 0.0
