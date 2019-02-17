@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import enum
 from typing import Callable, Optional, List
 
 import torch
@@ -8,12 +9,45 @@ from torch.nn import Module
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
-from ..visdom_board import get_visdom_manager
+from .. import visdom_board
 
 
 def call_all(callables: List[Callable]) -> None:
     for f in callables:
         f()
+
+
+class Event(enum.Enum):
+
+    ON_TRAINING_BEGIN = enum.auto()
+    ON_TRAINING_END   = enum.auto()
+    ON_EPOCH_BEGIN = enum.auto()
+    ON_EPOCH_END   = enum.auto()
+    ON_BATCH_BEGIN = enum.auto()
+    ON_BATCH_END   = enum.auto()
+    ANY = enum.auto()
+
+
+class MTCallback:
+
+    def __init__(self):
+        self.trainer = None
+        self.event   = Event.ANY
+
+    @abc.abstractmethod
+    def __call__(self) -> None:
+        raise NotImplementedError()
+
+    def on_attach(self) -> None:
+        """
+        This method is called when the callback is attached to an
+        instance of ModelTrainer. When on_attach() is called it is
+        guaranteed that self.trainer is set to the ModelTrainer instance
+        it has been attached to. This method can be used to initialize
+        the Callback's fields that need to access ModelTrainer data.
+        See BatchStatistics for an example.
+        """
+        pass
 
 
 class TrainingCallback:
@@ -22,18 +56,19 @@ class TrainingCallback:
         self.trainer = None
 
     @abc.abstractmethod
-    def __call__(self) -> None:
-        raise NotImplementedError()
-
-
-class BatchTrainingCallback:
-
-    def __init__(self):
-        self.trainer = None
-
-    @abc.abstractmethod
     def __call__(self, batch: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError()
+
+    def on_attach(self):
+        """
+        This method is called when the callback is attached to an
+        instance of ModelTrainer. When on_attach() is called it is
+        guaranteed that self.trainer is set to the ModelTrainer instance
+        it has been attached to. This method can be used to initialize
+        the Callback's fields that need to access ModelTrainer data.
+        See BatchStatistics for an example.
+        """
+        pass
 
 
 # TODO: ModelTrainerParams does not contain batch_size!!!
@@ -45,26 +80,28 @@ class ModelTrainerParams:
 
 class ModelTrainer:
     """
-        Model training class.
-        Given a model, a dataset and training parameters ModelTrainer.run() 
-        takes care of training the model. The user should use 
-        ModelTrainer.add_batch_training_callback() to provide the detalis on 
-        how to feed data into the model and how to compute the batch loss. 
-        See method documentation for details.
+    Model training class.
+    Given a model, a dataset and training parameters ModelTrainer.run()
+    takes care of training the model. The user should use
+    ModelTrainer.add_batch_training_callback() to provide the detalis on
+    how to feed data into the model and how to compute the batch loss.
+    See method documentation for details.
 
-        Fileds accessible from TrainingCallback:
-            loss_fn: Callable
-            optimizer: torch.optim.Optimizer
-            epochs: int
-            current_epoch: int
-            device: torch.device
-            vm: visdom_board.VisdomManager
-            model: torch.nn.Module
-            training_data_loader: torch.utils.data.DataLoader
-            validation_data_loader: torch.utils.data.DataLoader
+    Fileds accessible from TrainingCallback:
+        loss_fn: Callable
+        optimizer: torch.optim.Optimizer
+        epochs: int
+        current_epoch: int
+        current_batch: int
+        last_batch_loss: float
+        device: torch.device
+        vm: visdom_board.VisdomManager
+        model: torch.nn.Module
+        data_loader_tr: torch.utils.data.DataLoader
+        data_loader_va: torch.utils.data.DataLoader
 
-        The trainer can be further specialized adding pre-training, post-training, 
-        pre-epoch, post-epoch, pre-batch and post-batch callbacks.
+    The trainer can be further specialized adding pre-training, post-training,
+    pre-epoch, post-epoch, pre-batch and post-batch callbacks.
     """
 
     def __init__(self, loss_fn: Callable, epochs: int, optimizer: Optimizer, 
@@ -82,19 +119,21 @@ class ModelTrainer:
         self.optimizer = optimizer
         self.epochs    = epochs
         self.current_epoch = -1
+        self.current_batch = -1
+        self.last_batch_loss = 0.0
         self.device    = device
 
         self.model = None
-        self.training_data_loader   = None
-        self.validation_data_loader = None
+        self.data_loader_tr = None
+        self.data_loader_va = None
 
         # callbacks
-        class StubBatchCallback(BatchTrainingCallback): 
+        class StubCallback(TrainingCallback):
             def __call__(self, batch: torch.Tensor):
                 raise NotImplementedError('You should specify a batch training callback ' +
                                           'using ModelTrainer.add_batch_training_callback()')
         self.batch_training = None
-        self.add_batch_training_callback(StubBatchCallback())
+        self.add_batch_training_callback(StubCallback())
         self.pre_training_actions  = []
         self.pre_epoch_actions     = []
         self.pre_batch_actions     = []
@@ -103,19 +142,9 @@ class ModelTrainer:
         self.post_training_actions = []
 
         # initialize VisdomBoard tools
-        self.vm = get_visdom_manager()
+        self.vm = visdom_board.get_visdom_manager()
 
-        with self.vm.environment('Training'):
-            self._output_console = self.vm.get_output_console()
-            self._loss_plot      = self.vm.get_line_plot(title='Training loss', 
-                                                         xaxis='epochs',
-                                                         yaxis='loss')  # ,
-                                                         # opts=dict(title='Training loss',
-                                                         #          xlabel='Epochs',
-                                                         #          ylabel='Loss'))
-        self.train_logging_period = 10
-
-    def run(self, model: Module, training_set: DataLoader, training_callback: Optional[BatchTrainingCallback]=None, 
+    def run(self, model: Module, training_set: DataLoader, training_callback: Optional[TrainingCallback]=None,
             validation_set: Optional[DataLoader] = None) -> None:
         """
             Runs a complete training on model. If validation_set is set to None evaluate_loss()
@@ -125,8 +154,8 @@ class ModelTrainer:
             self.add_batch_training_callback(training_callback)
 
         self.model = model
-        self.training_data_loader   = training_set
-        self.validation_data_loader = validation_set
+        self.data_loader_tr = training_set
+        self.data_loader_va = validation_set
         self.model.to(self.device)  # ensure model and data are on the same device
 
         call_all(self.pre_training_actions)
@@ -142,7 +171,28 @@ class ModelTrainer:
     def save_params(self) -> ModelTrainerParams:
         return ModelTrainerParams(self.epochs)
 
-    def add_batch_training_callback(self, callback: BatchTrainingCallback) -> ModelTrainer:
+    def attach_callback(self, callback: MTCallback) -> ModelTrainer:
+        callback.trainer = self
+
+        if callback.event is Event.ON_TRAINING_BEGIN:
+            self.pre_training_actions.append(callback)
+        elif callback.event is Event.ON_TRAINING_END:
+            self.post_training_actions.append(callback)
+        elif callback.event is Event.ON_EPOCH_BEGIN:
+            self.pre_epoch_actions.append(callback)
+        elif callback.event is Event.ON_EPOCH_END:
+            self.post_epoch_actions.append(callback)
+        elif callback.event is Event.ON_BATCH_BEGIN:
+            self.pre_batch_actions.append(callback)
+        elif callback.event is Event.ON_BATCH_END:
+            self.post_batch_actions.append(callback)
+        else:
+            raise ValueError()
+
+        callback.on_attach()
+        return self
+
+    def add_batch_training_callback(self, callback: TrainingCallback) -> ModelTrainer:
         """ 
             Adds to ModelTrainer a TrainingCallback which only input argument 
             is the batch as given by the training data loader provided to ModelTrainer.
@@ -160,48 +210,16 @@ class ModelTrainer:
         """
         callback.trainer = self
         self.batch_training = callback
-        return self
-
-    def add_pre_training_action(self, callback: TrainingCallback) -> ModelTrainer:
-        callback.trainer = self
-        self.pre_training_actions.append(callback)
-        return self
-
-    def add_post_training_action(self, callback: TrainingCallback) -> ModelTrainer:
-        callback.trainer = self
-        self.post_training_actions.append(callback)
-        return self
-
-    def add_pre_epoch_action(self, callback: TrainingCallback) -> ModelTrainer:
-        callback.trainer = self
-        self.pre_epoch_actions.append(callback)
-        return self
-
-    def add_post_epoch_action(self, callback: TrainingCallback) -> ModelTrainer:
-        callback.trainer = self
-        self.post_epoch_actions.append(callback)
-        return self
-
-    def add_pre_batch_action(self, callback: TrainingCallback) -> ModelTrainer:
-        callback.trainer = self
-        self.pre_batch_actions.append(callback)
-        return self
-
-    def add_post_batch_action(self, callback: TrainingCallback) -> ModelTrainer:
-        callback.trainer = self
-        self.post_batch_actions.append(callback)
+        callback.on_attach()
         return self
 
     # ----- private functions -----
 
     def _train_epoch(self) -> None:
-        training_data_len = len(self.training_data_loader)
         self.running_loss = 0.0
-        for batch_index, data in enumerate(self.training_data_loader, 0):
-            if torch.is_tensor(data):
-                data = data.to(self.device)
-            else:
-                data = [x.to(self.device) for x in data]
+        for batch_index, data in enumerate(self.data_loader_tr, 0):
+            self.current_batch = batch_index
+            data = data.to(self.device)
             
             call_all(self.pre_batch_actions)
 
@@ -210,13 +228,5 @@ class ModelTrainer:
             batch_loss.backward()        
             self.optimizer.step()
 
-            self.running_loss += batch_loss.item()
+            self.last_batch_loss = batch_loss.item()
             call_all(self.post_batch_actions)
-
-            # print statistics
-            if batch_index % self.train_logging_period == self.train_logging_period-1:  # print every time one-tenth of the dataset has been processed
-                mean_loss = self.running_loss / self.train_logging_period  # print mean loss over the processed batches
-                self._output_console.print('[epoch: {:.0f}, batch: {:.0f}] - loss: {:.3f}'
-                                           .format(self.current_epoch + 1, batch_index + 1, mean_loss))
-                self._loss_plot.append([self.current_epoch + batch_index/training_data_len], [mean_loss])
-                self.running_loss = 0.0

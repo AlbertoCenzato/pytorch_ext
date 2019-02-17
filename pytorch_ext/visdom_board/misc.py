@@ -8,7 +8,7 @@ import tempfile
 import subprocess
 
 import torch
-import torchvision
+from pytorch_ext import torchvision
 import visdom
 
 import plotly.graph_objs as go

@@ -19,7 +19,7 @@ def create_model_trainer(loss_fn: Callable, epochs: int, optimizer: Optimizer,
     :return:
     """
     model_trainer = ModelTrainer(loss_fn, epochs, optimizer, device)
-    model_trainer.add_post_epoch_action(TrainingTimeEstimation()) \
-                 .add_post_batch_action(BatchStatistics(10))
+    model_trainer.attach_callback(TrainingTimeEstimation()) \
+                 .attach_callback(BatchStatistics(10))
 
     return model_trainer

@@ -1,1 +1,0 @@
-name = 'pytorch_ext'
