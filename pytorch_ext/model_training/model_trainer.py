@@ -107,13 +107,12 @@ class ModelTrainer:
     def __init__(self, loss_fn: Callable, epochs: int, optimizer: Optimizer, 
                  device=torch.device('cpu')):
         """
-            Args:
-             @loss_fn: a callable object or a function. It can be a Pytorch loss function 
+        :param loss_fn: a callable object or a function. It can be a Pytorch loss function
                        (e.g torch.nn.MSELoss or torch.nn.CrossEntropyLoss) or any other function
                        with the same signature.
-             @epochs: training epochs
-             @optimizer: a Pytorch optimizer; see torch.optim
-             @device: device to use
+        :param epochs: training epochs
+        :param optimizer: a Pytorch optimizer; see torch.optim
+        :param device: device to use
         """
         self.loss_fn   = loss_fn
         self.optimizer = optimizer
@@ -121,7 +120,7 @@ class ModelTrainer:
         self.current_epoch = -1
         self.current_batch = -1
         self.last_batch_loss = 0.0
-        self.device    = device
+        self.device = device
 
         self.model = None
         self.data_loader_tr = None
@@ -147,8 +146,8 @@ class ModelTrainer:
     def run(self, model: Module, training_set: DataLoader, training_callback: Optional[TrainingCallback]=None,
             validation_set: Optional[DataLoader] = None) -> None:
         """
-            Runs a complete training on model. If validation_set is set to None evaluate_loss()
-            will not be called.
+        Runs a complete training on model. If validation_set is set to None evaluate_loss()
+        will not be called.
         """
         if training_callback:
             self.add_batch_training_callback(training_callback)
@@ -194,19 +193,19 @@ class ModelTrainer:
 
     def add_batch_training_callback(self, callback: TrainingCallback) -> ModelTrainer:
         """ 
-            Adds to ModelTrainer a TrainingCallback which only input argument 
-            is the batch as given by the training data loader provided to ModelTrainer.
-            The callback can access all ModelTrainer fields through self.trainer. 
-            For example a common use case for a supervised labeling task could be:
+        Adds to ModelTrainer a TrainingCallback which only input argument
+        is the batch as given by the training data loader provided to ModelTrainer.
+        The callback can access all ModelTrainer fields through self.trainer.
+        For example a common use case for a supervised labeling task could be:
 
-            class ExampleSupervisedBatchTrainer(TrainingCallback):
-                def __call__(self, batch) -> torch.Tensor:
-                    data, labels = batch
-                    output = self.trainer.model(data)
-                    return self.trainer.loss_fn(output, labels)
+        class ExampleSupervisedBatchTrainer(TrainingCallback):
+            def __call__(self, batch) -> torch.Tensor:
+                data, labels = batch
+                output = self.trainer.model(data)
+                return self.trainer.loss_fn(output, labels)
 
-            The callback must return a torch.Tensor representing the loss for the given batch.
-            ModelTrainer will then take care of the backpropagation an weights update.
+        The callback must return a torch.Tensor representing the loss for the given batch.
+        ModelTrainer will then take care of the backpropagation an weights update.
         """
         callback.trainer = self
         self.batch_training = callback

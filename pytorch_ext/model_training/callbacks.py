@@ -1,4 +1,5 @@
 import random
+import os
 import time
 import datetime
 from typing import Tuple
@@ -6,6 +7,18 @@ from typing import Tuple
 import torch
 
 from .model_trainer import MTCallback, TrainingCallback, Event
+
+
+class SupervisedTraining(TrainingCallback):
+    """
+        Trains a model that receives as input an (input data, label) tuple.
+        Useful in most supervised training scenarios.
+    """
+
+    def __call__(self, data_label_tuple: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        data, label = data_label_tuple
+        output = self.trainer.model(data)
+        return self.trainer.loss_fn(output, label)
 
 
 class RNNSequenceTrainer(TrainingCallback):
@@ -35,87 +48,6 @@ class RNNStepByStepTrainer(TrainingCallback):
             sequence_loss += self.trainer.loss_fn(output, ground_truth)
         
         return sequence_loss
-
-
-class RNNCurriculumLearningTrainer(TrainingCallback):
-    """
-    """
-
-    UNDER_THRESHOLD_BATCHES = 20
-
-    def __init__(self, threshold: float, max_predicted_frames: int):
-        super(RNNCurriculumLearningTrainer, self).__init__()
-        self.threshold = threshold
-        self.max_predicted_frames = max_predicted_frames
-        self.n_of_predicted_frames = 1
-        self.under_threshold_batches = 0
-
-    def __call__(self, data_batch: torch.Tensor) -> torch.Tensor:
-        # using data.size(0) instead of self.batch_size because 
-        # if training_data_len % self.batch_size != 0 then the last
-        # batch returned by enumerate() does not have self.batch_size elements
-        model = self.trainer.model
-        state = model.init_hidden(data_batch.size(0))
-        sequence_len = data_batch.size(1)
-                
-        gen_start, gen_end = self._naive_curriculum_learning(buffering_frames=4, sequence_len=sequence_len)
-
-        sequence_loss = torch.zeros(1).to(self.trainer.device)
-        for t in range(sequence_len - 1):
-            if gen_start <= t <= gen_end:
-                output, state = model(output, state)
-            else:
-                output, state = model(data_batch[:, t, :], state)
-            ground_truth = data_batch[:, t+1, :]
-            sequence_loss += self.trainer.loss_fn(output, ground_truth)
-
-        self._raise_difficulty(sequence_loss.item())
-
-        return sequence_loss
-
-    def _raise_difficulty(self, loss: float) -> None:
-        # if the loss of this sequence is lower than a fixed threshold
-        # increase task difficulty
-        if loss < self.threshold and self.n_of_predicted_frames < self.max_predicted_frames:
-            self.under_threshold_batches += 1
-            if self.under_threshold_batches > RNNCurriculumLearningTrainer.UNDER_THRESHOLD_BATCHES:
-                self.n_of_predicted_frames += 1
-                print('Loss has been < {} for {} batches: raising difficulty'
-                      .format(self.threshold, RNNCurriculumLearningTrainer.UNDER_THRESHOLD_BATCHES))
-        else:
-            self.under_threshold_batches = 0
-
-    def _naive_curriculum_learning(self, buffering_frames: int, sequence_len: int) -> Tuple[int, int]:
-        """ 
-            Returns begin and end indexes for the n-frames ahead predictions
-            following the naive curriculum learning strategy used in 
-            Zaremba and Sustskever, 'Learning to execute', 2014.
-
-            Output: (begin_index, end_index).
-            buffering_frames <= begin_index <= end_index < sequence_len
-        """
-        begin_index = random.randint(buffering_frames, sequence_len - self.n_of_predicted_frames - 1)
-        end_index   = begin_index + self.n_of_predicted_frames
-        return begin_index, end_index
-
-    def _combined_curriculum_learning(self, buffering_frames: int, sequence_len: int) -> Tuple[int, int]:
-        """ 
-            Returns begin and end indexes for the n-frames ahead predictions
-            following the combined curriculum learning strategy used in 
-            Zaremba and Sustskever, 'Learning to execute', 2014.
-
-            Output: (begin_index, end_index).
-            buffering_frames <= begin_index <= end_index < sequence_len
-        """
-
-        strategy = 'naive' if random.randint(0,99) < 80 else 'mixed'
-        if strategy == 'naive':
-            begin_index, end_index = self._naive_curriculum_learning(buffering_frames, sequence_len)
-        else:
-            begin_index = random.randint(buffering_frames, sequence_len-1)
-            end_index   = random.randint(begin_index, sequence_len - 1)
-
-        return begin_index, end_index
 
 
 class RNNLongTermPredictionEvaluator(MTCallback):
@@ -190,12 +122,16 @@ class RNNLongTermPredictionEvaluator(MTCallback):
 
 
 class TrainingTimeEstimation(MTCallback):
+    """
+    This callback estimates the remaining training time and shows it on a visdom_board console
+    """
 
     def __init__(self):
         super(MTCallback, self).__init__()
         self.event = Event.ON_EPOCH_END
         self.epoch_start_time = None
         self.cumulative_epochs_times = 0.0
+        self.console = None
 
     def on_attach(self):
         vm = self.trainer.vm
@@ -256,3 +192,27 @@ class BatchStatistics(MTCallback):
                                .format(epoch + 1, batch + 1, mean_loss))
             self.loss_plot.append([epoch + batch / dataset_size], [mean_loss])
             self.running_loss = 0.0
+
+
+class Checkpoint(MTCallback):
+    """
+    Callback for checkpointing the model during training
+    """
+
+    def __init__(self, checkpoint_dir: str, period: int):
+        """
+        :param checkpoint_dir: path to the folder where checkpoints should be saved
+        :param period: checkpointing period expressed in epochs (i.e. period=5 will create a checkpoint every 5 epochs)
+        """
+        super(Checkpoint, self).__init__()
+        self.checkpoint_dir = checkpoint_dir
+        self.period = period
+        self.checkpoint_counter = 0
+        if not (os.path.exists(self.checkpoint_dir) and os.path.isdir(self.checkpoint_dir)):
+            os.mkdir(self.checkpoint_dir)
+
+    def __call__(self):
+        if self.trainer.current_epoch % self.period == 0:
+            model_path = os.path.join(self.checkpoint_dir, 'checkpoint_{}.pt'.format(self.checkpoint_counter))
+            torch.save(self.trainer.model, model_path)
+            self.checkpoint_counter += 1
