@@ -205,6 +205,7 @@ class Checkpoint(MTCallback):
         :param period: checkpointing period expressed in epochs (i.e. period=5 will create a checkpoint every 5 epochs)
         """
         super(Checkpoint, self).__init__()
+        self.event = Event.ON_EPOCH_END
         self.checkpoint_dir = checkpoint_dir
         self.period = period
         self.checkpoint_counter = 0
