@@ -1,10 +1,14 @@
 from typing import Optional
 import time
 
+import torch
+from torch import nn
+
 import visdom
 
 from .plotting import LinePlot, LineStdPlot, HistogramPlot, RibbonPlot, colorscale
 from .misc import OutputConsole, ImageWindow, ProgressBar, VideoWindow
+from .net_inspector import NetInspector
 
 
 class VisdomManager:
@@ -79,6 +83,9 @@ class VisdomManager:
             env = self._current_env
         return ProgressBar(self.vis, env, title)
 
+    def get_net_inspector(self, model: nn.Module, test_tensor: torch.Tensor) -> NetInspector:
+        return NetInspector(self.vis, model, test_tensor)
+
     def environment(self, env: str):
         self._current_env = env
         return self
@@ -99,3 +106,10 @@ class VisdomManager:
 
     def __exit__(self, type, value, traceback):
         self._current_env = VisdomManager.DEFAULT_ENV
+
+
+_visdom_manager = VisdomManager()
+
+
+def get_visdom_manager():
+    return _visdom_manager

@@ -128,7 +128,7 @@ class TrainingTimeEstimation(MTCallback):
 
     def __init__(self):
         super(MTCallback, self).__init__()
-        self.event = Event.ON_EPOCH_END
+        self.event = Event.ON_EPOCH_BEGIN
         self.epoch_start_time = None
         self.cumulative_epochs_times = 0.0
         self.console = None
@@ -182,8 +182,11 @@ class BatchStatistics(MTCallback):
                             )
 
     def __call__(self) -> None:
-        self.running_loss += self.trainer.last_batch_loss
         batch = self.trainer.current_batch
+        if batch == 0:
+            self.running_loss = 0.0    # reset running loss at epoch begin
+
+        self.running_loss += self.trainer.last_batch_loss
         if (batch % self.logging_period) == self.logging_period-1:  # print every time one-tenth of the dataset has been processed
             epoch = self.trainer.current_epoch
             dataset_size = len(self.trainer.data_loader_tr)

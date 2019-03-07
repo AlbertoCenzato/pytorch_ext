@@ -9,7 +9,7 @@ from .callbacks import TrainingTimeEstimation, BatchStatistics, Checkpoint
 
 
 def create_model_trainer(loss_fn: Callable, epochs: int, optimizer: Optimizer,
-                         device=torch.device('cpu')) -> ModelTrainer:
+                         device=torch.device('cpu'), checkpoint_dir=None) -> ModelTrainer:
     """
     Creates a ModelTrainer with the most common MTCallbacks already added.
     It has TrainingTimeEstimation, BatchStatics and Checkpoint already attached
@@ -17,9 +17,11 @@ def create_model_trainer(loss_fn: Callable, epochs: int, optimizer: Optimizer,
     :param epochs:
     :param optimizer:
     :param device:
+    :param checkpoint_dir:
     :return: a ModelTrainer instance
     """
-    checkpoint_dir = os.path.join(os.getcwd(), 'checkpoints')
+    if checkpoint_dir is None:
+        checkpoint_dir = os.path.join(os.getcwd(), 'checkpoints')
     model_trainer = ModelTrainer(loss_fn, epochs, optimizer, device)
     model_trainer.attach_callback(TrainingTimeEstimation()) \
                  .attach_callback(BatchStatistics(10)) \

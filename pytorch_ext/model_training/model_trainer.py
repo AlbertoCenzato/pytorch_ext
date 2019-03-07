@@ -83,7 +83,7 @@ class ModelTrainer:
     Model training class.
     Given a model, a dataset and training parameters ModelTrainer.run()
     takes care of training the model. The user should use
-    ModelTrainer.add_batch_training_callback() to provide the detalis on
+    ModelTrainer.add_batch_training_callback() to provide the details on
     how to feed data into the model and how to compute the batch loss.
     See method documentation for details.
 
@@ -131,14 +131,14 @@ class ModelTrainer:
             def __call__(self, batch: torch.Tensor):
                 raise NotImplementedError('You should specify a batch training callback ' +
                                           'using ModelTrainer.add_batch_training_callback()')
-        self.batch_training = None
+        self._batch_training = None
         self.add_batch_training_callback(StubCallback())
-        self.pre_training_actions  = []
-        self.pre_epoch_actions     = []
-        self.pre_batch_actions     = []
-        self.post_batch_actions    = []
-        self.post_epoch_actions    = []
-        self.post_training_actions = []
+        self._pre_training_actions  = []    # these lists are private to prevent callbacks from
+        self._pre_epoch_actions     = []     # messing up with themselves or other callbacks
+        self._pre_batch_actions     = []
+        self._post_batch_actions    = []
+        self._post_epoch_actions    = []
+        self._post_training_actions = []
 
         # initialize VisdomBoard tools
         self.vm = visdom_board.get_visdom_manager()
@@ -157,15 +157,15 @@ class ModelTrainer:
         self.data_loader_va = validation_set
         self.model.to(self.device)  # ensure model and data are on the same device
 
-        call_all(self.pre_training_actions)
+        call_all(self._pre_training_actions)
         
         for epoch in range(self.epochs):  # loop over the dataset multiple times
             self.current_epoch = epoch
-            call_all(self.pre_epoch_actions)
+            call_all(self._pre_epoch_actions)
             self._train_epoch()
-            call_all(self.post_epoch_actions)
+            call_all(self._post_epoch_actions)
 
-        call_all(self.post_training_actions)
+        call_all(self._post_training_actions)
     
     def save_params(self) -> ModelTrainerParams:
         return ModelTrainerParams(self.epochs)
@@ -174,17 +174,17 @@ class ModelTrainer:
         callback.trainer = self
 
         if callback.event is Event.ON_TRAINING_BEGIN:
-            self.pre_training_actions.append(callback)
+            self._pre_training_actions.append(callback)
         elif callback.event is Event.ON_TRAINING_END:
-            self.post_training_actions.append(callback)
+            self._post_training_actions.append(callback)
         elif callback.event is Event.ON_EPOCH_BEGIN:
-            self.pre_epoch_actions.append(callback)
+            self._pre_epoch_actions.append(callback)
         elif callback.event is Event.ON_EPOCH_END:
-            self.post_epoch_actions.append(callback)
+            self._post_epoch_actions.append(callback)
         elif callback.event is Event.ON_BATCH_BEGIN:
-            self.pre_batch_actions.append(callback)
+            self._pre_batch_actions.append(callback)
         elif callback.event is Event.ON_BATCH_END:
-            self.post_batch_actions.append(callback)
+            self._post_batch_actions.append(callback)
         else:
             raise ValueError()
 
@@ -208,7 +208,7 @@ class ModelTrainer:
         ModelTrainer will then take care of the backpropagation an weights update.
         """
         callback.trainer = self
-        self.batch_training = callback
+        self._batch_training = callback
         callback.on_attach()
         return self
 
@@ -218,14 +218,17 @@ class ModelTrainer:
         self.running_loss = 0.0
         for batch_index, data in enumerate(self.data_loader_tr, 0):
             self.current_batch = batch_index
-            data = data.to(self.device)
+            if torch.is_tensor(data):
+                data = data.to(self.device)
+            else:   # if data is not a torch.Tensor assume the DataLoader has returned a list or tuple (data, label)
+                data = [d.to(self.device) for d in data]
             
-            call_all(self.pre_batch_actions)
+            call_all(self._pre_batch_actions)
 
             self.optimizer.zero_grad()  # reset parameters gradient
-            batch_loss = self.batch_training(data)
+            batch_loss = self._batch_training(data)
             batch_loss.backward()        
             self.optimizer.step()
 
             self.last_batch_loss = batch_loss.item()
-            call_all(self.post_batch_actions)
+            call_all(self._post_batch_actions)
