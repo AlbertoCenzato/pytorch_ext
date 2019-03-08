@@ -1,2 +1,2 @@
-from .net_vis import NetVis
+from .net_query import NetQuery
 from .submodules_tree import SubmodulesTree
