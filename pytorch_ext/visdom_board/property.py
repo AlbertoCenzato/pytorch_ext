@@ -23,7 +23,8 @@ class Property:
         """
         Represents a property to be shown in visdom property window. in addition to property type, property name and
         property value this class has a UID, a callback to be called when a visdom event associated to this property is
-        raised and a data field to suit any additional need.
+        raised and a data field to suit any additional need. Moreover Properties are organized in a hierarchical
+        structure, therefore a property can have children properties.
         :param property_type: one of Property.Type
         :param name: property name to display
         :param init_value: property value
@@ -59,6 +60,21 @@ class Property:
         old_value = self.value['value']
         self.value['value'] = event['value']
         self.on_update(self, old_value)
+
+    def add_child(self, property) -> None:
+        self.children[property.uid] = property
+
+    def remove_child(self, property_uid: UID):
+        child = self.children[property_uid]
+        child.remove_all_children()
+
+        child.close()
+        del self.children[property_uid]
+
+    def remove_all_children(self):
+        to_remove = list(self.children)
+        for child_uid in to_remove:
+            self.remove_child(child_uid)
 
     def close(self):
         """
@@ -96,6 +112,17 @@ class Button(Property):
         self.on_update(self, old_value)
 
 
+def get_child_properties(property: Property) -> List[Property]:
+    properties = []
+    for child_uid in sorted(property.children):
+        prop = property.children[child_uid]
+        properties.append(prop)
+        children_prop = get_child_properties(prop)
+        for child in children_prop:
+            properties.append(child)
+    return properties
+
+
 class PropertiesManager(VisObject):
     """
     VisObject that manages the properties window.
@@ -105,14 +132,14 @@ class PropertiesManager(VisObject):
         super(PropertiesManager, self).__init__(vis, env)
         self._properties: Dict[UID, Property] = dict()
 
-        self._win = vis.properties(list(self._properties.values()), env=env)
+        self._win = vis.properties([], env=env)
         self._vis.register_event_handler(self._dispatcher, self._win)
 
     def update_property_win(self) -> None:
         """
         Refreshes the UI
         """
-        properties = [prop.value for prop in self._properties.values()]
+        properties = [prop.value for prop in self.get_property_list()]
         self._vis.properties(properties, win=self._win, env=self._env)
 
     def _dispatcher(self, event: dict) -> None:
@@ -124,32 +151,38 @@ class PropertiesManager(VisObject):
         if event['event_type'] != 'PropertyUpdate':
             return
 
-        prop = list(self._properties.values())[event['propertyId']]
+        properties_list = self.get_property_list()
+        prop = properties_list[event['propertyId']]
         prop.handle(event)
 
         self.update_property_win()
 
+    def get_property_list(self) -> List[Property]:
+        properties = []
+        for prop_uid in sorted(self._properties):
+            prop = self._properties[prop_uid]
+            properties.append(prop)
+            children_prop = get_child_properties(prop)
+            for child in children_prop:
+                properties.append(child)
+        return properties
+
     def add(self, property: Property) -> None:
         """
-        Recursively adds a property and its children to the properties window.
+        Adds a top-level entry to the properties window.
         To show it call PropertyManager.update_property_win().
         :param property_uid: ID associated with 'property'. Every property must have a unique ID.
         :param property:
         """
         self._properties[property.uid] = property
-        for child_uid in property.children:
-            self.add(property.children[child_uid])
 
     def remove(self, property_uid: UID) -> Property:
         """
-        Recusively removes the property associated with 'name' and all its children.
+        Removes the property associated with 'name' and all its children.
         :param property_uid:
         :return: the removed property
         """
         prop = self._properties[property_uid]
-        if prop.children:
-            for child_uid in prop.children:
-                self.remove(child_uid)
         del self._properties[property_uid]
         prop.close()
         return prop

@@ -6,6 +6,12 @@ from torch import nn
 UID = str
 
 
+def is_builtin_collection(module: nn.Module):
+    return isinstance(module, nn.ModuleList) or \
+           isinstance(module, nn.ModuleDict) or \
+           isinstance(module, nn.Sequential)
+
+
 # TODO: add the option to navigate the tree as a computational graph.
 #       Every node should have 'prev' and 'next' attributes respectively
 #       indicating which is the predecessor and successor node in the computation

@@ -34,41 +34,25 @@ class NetInspector:
         Initializes the UI.
         """
         root_uid = self.model.root()
-        for uid in self.model.children(root_uid):
-            self._build_submodule_button(uid)
+
+        for child_uid in self.model.children(root_uid):
+            button = self._build_submodule_button(child_uid)
+            self.properties_manager.add(button)
 
         self.properties_manager.update_property_win()
-
-    def _get_children_list(self, module_uid: UID, ignore_builtin_collections=True) -> List[UID]:
-        children_list = []
-        for child_uid in self.model.children(module_uid):
-            if ignore_builtin_collections:
-                child_module = self.model.get(child_uid)
-                if isinstance(child_module, torch.nn.Sequential) or isinstance(child_module, torch.nn.ModuleList) or \
-                   isinstance(child_module, torch.nn.ModuleDict):
-                    for subchild_uid in self._get_children_list(child_uid, ignore_builtin_collections):
-                        children_list.append(subchild_uid)
-            children_list.append(child_uid)
-
-        return children_list
 
     def _submodule_button_on_click(self, button: Button, module_uid: str) -> None:
         button_state = button.state
         if button_state == Button.State.RELEASED:  # remove children
-            for uid in button.children:
-                self.properties_manager.remove(uid)
-            button.children = dict()
+            button.remove_all_children()
+            button.close()
 
-            if hasattr(button, 'close_active_windows'):
-                button.close_active_windows()
+            if hasattr(button, 'init_children'):
                 button.init_children()
-                for child in button.children.values():
-                    self.properties_manager.add(child)
         else:
-            children_list = self._get_children_list(module_uid)
-            for child_uid in children_list:
+            for child_uid in self.model.children(module_uid):
                 child_button = self._build_submodule_button(child_uid)
-                button.children[child_uid] = child_button
+                button.add_child(child_button)
 
         self.properties_manager.update_property_win()
 
@@ -104,7 +88,6 @@ class NetInspector:
                 button.init_children()
             else:
                 raise NotImplementedError('Tensors with a number of dimensions < 2 or > 5 are not supported')
-        self.properties_manager.add(button)
 
         return button
 

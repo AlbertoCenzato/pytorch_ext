@@ -34,7 +34,7 @@ class CNNSubmoduleButton(Button):
 
     def init_children(self):
         batch_size = self.data.size(0)
-        channels = self.data.size(1)
+        channels   = self.data.size(1)
 
         # dropdown list to choose batch element
         batch_elem_list = ['All'] + ['Sample {}'.format(i) for i in range(batch_size)]
@@ -46,8 +46,8 @@ class CNNSubmoduleButton(Button):
         channel_select = DropdownList(uid=self.chann_select_uid, name=RNNSubmoduleButton.CHANN_SELECT_TXT,
                                       values=channels_list, init_value=1, on_update=self.update_shown_activations)
 
-        self.children[self.batch_select_uid] = batch_elem_select
-        self.children[self.chann_select_uid] = channel_select
+        self.add_child(batch_elem_select)
+        self.add_child(channel_select)
 
     def update_shown_activations(self, dropdown_list: Optional[DropdownList] = None,
                                  old_value: Optional[str] = None) -> None:
@@ -134,9 +134,9 @@ class RNNSubmoduleButton(Button):
         channel_select = DropdownList(uid=self.chann_select_uid, name=RNNSubmoduleButton.CHANN_SELECT_TXT,
                                       values=channels_list, init_value=1, on_update=self.update_shown_activations)
 
-        self.children[self.batch_select_uid] = batch_elem_select
-        self.children[self.frame_select_uid] = frame_select
-        self.children[self.chann_select_uid] = channel_select
+        self.add_child(batch_elem_select)
+        self.add_child(frame_select)
+        self.add_child(channel_select)
 
     def update_shown_activations(self, dropdown_list: Optional[DropdownList]=None,
                                  old_value: Optional[str]=None) -> None:
