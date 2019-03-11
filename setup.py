@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pytorch_ext",
-    version="0.1.0",
+    version="0.9.0",
     author="Alberto Cenzato",
     author_email="alberto.cenzato@outlook.it",
     description="Extension modules for Pytorch",
