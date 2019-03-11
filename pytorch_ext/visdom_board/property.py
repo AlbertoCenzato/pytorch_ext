@@ -6,19 +6,33 @@ from visdom import Visdom
 from .core import VisObject
 
 
+UID = str
+
+
 class Property:
 
-    def __init__(self, property_type: str, name: str, init_value: int, on_update: Optional[Callable]=None):
-        """
+    class Type(enum.Enum):
+        text     = enum.auto()
+        number   = enum.auto()
+        button   = enum.auto()
+        checkbox = enum.auto()
+        select   = enum.auto()
 
-        :param property_type:
-        :param name:
-        :param init_value:
+    def __init__(self, uid: UID, property_type: enum.Enum, name: str, init_value: str,
+                 on_update: Optional[Callable]=None, data: Optional[Any]=None):
+        """
+        Represents a property to be shown in visdom property window. in addition to property type, property name and
+        property value this class has a UID, a callback to be called when a visdom event associated to this property is
+        raised and a data field to suit any additional need.
+        :param property_type: one of Property.Type
+        :param name: property name to display
+        :param init_value: property value
         :param on_update: function to be called on property update. The callback receives
                           the property as first argument and its old value as second argument.
         """
+        self.uid = uid
         self.value = dict(
-            type=property_type,
+            type=property_type.name,
             name=name,
             value=init_value
         )
@@ -26,17 +40,19 @@ class Property:
         if on_update:
             self.on_update = on_update
         else:
-            def noop(prop, old_val):
+            def noop(prop: Property, old_val: str):
                 pass
 
             self.on_update = noop
 
-        # FIXME: Property does not have the concept of a uid or a name so this list should contain
-        #        Properties not strings. But then how can Property manager access to Properties using their uids?
-        self.children: Dict[str, Property] = {}
-        self.data: Any = None
+        self.children: Dict[UID, Property] = {}
+        self.data = data
 
-    def handle(self, event):
+    def handle(self, event) -> None:
+        """
+        Updates the property value and calls on_update callback
+        :param event:
+        """
         if event['event_type'] != 'PropertyUpdate':
             return
 
@@ -44,25 +60,33 @@ class Property:
         self.value['value'] = event['value']
         self.on_update(self, old_value)
 
+    def close(self):
+        """
+        Override this method to perform any kind of cleanup action
+        needed when the property is destroyed.
+        """
+        pass
+
 
 class DropdownList(Property):
 
-    def __init__(self, name: str, init_value: int, values: List[str], on_update: Callable):
-        super(DropdownList, self).__init__('select', name, init_value, on_update)
+    def __init__(self, uid: UID, name: str, values: List[str], init_value: int=0,
+                 on_update: Optional[Callable]=None, data: Optional[Any]=None):
+        super(DropdownList, self).__init__(uid, Property.Type.select, name, init_value, on_update, data)
         self.value['values'] = values
 
 
 class Button(Property):
 
     class State(enum.Enum):
-        RELEASED = 0
-        PRESSED  = 1
+        RELEASED = enum.auto()
+        PRESSED  = enum.auto()
 
-    def __init__(self, init_value: int, on_update: Callable):
-        super(Button, self).__init__('button', '', init_value, on_update)
+    def __init__(self, uid: UID, init_value: str, on_update: Optional[Callable]=None, data: Optional[Any]=None):
+        super(Button, self).__init__(uid, Property.Type.button, '', init_value, on_update, data)
         self.state = Button.State.RELEASED
 
-    def handle(self, event):
+    def handle(self, event) -> None:
         if event['event_type'] != 'PropertyUpdate':
             return
 
@@ -79,22 +103,19 @@ class PropertiesManager(VisObject):
 
     def __init__(self, vis: Visdom, env: str='main'):
         super(PropertiesManager, self).__init__(vis, env)
-        self._properties: Dict[str, Property] = dict()
-        self._cached_properties_list: List[Property] = []
+        self._properties: Dict[UID, Property] = dict()
 
-        self._win = vis.properties(self._cached_properties_list, env=env)
-
-        self._vis.register_event_handler(self.dispatcher, self._win)
+        self._win = vis.properties(list(self._properties.values()), env=env)
+        self._vis.register_event_handler(self._dispatcher, self._win)
 
     def update_property_win(self) -> None:
         """
         Refreshes the UI
         """
-        self._cached_properties_list = list(self._properties.values())
-        properties = [prop.value for prop in self._cached_properties_list]
+        properties = [prop.value for prop in self._properties.values()]
         self._vis.properties(properties, win=self._win, env=self._env)
 
-    def dispatcher(self, event: dict) -> None:
+    def _dispatcher(self, event: dict) -> None:
         """
         Dispatches the event raised by visdom server on PropertiesManager window
         to the correct property.
@@ -103,37 +124,41 @@ class PropertiesManager(VisObject):
         if event['event_type'] != 'PropertyUpdate':
             return
 
-        prop = self._cached_properties_list[event['propertyId']]
+        prop = list(self._properties.values())[event['propertyId']]
         prop.handle(event)
 
         self.update_property_win()
 
-    def add(self, property_id: str, property: Property) -> None:
+    def add(self, property: Property) -> None:
         """
-        Add a property to the properties window. To show it call PropertyManager.update_property_win()
-        :param property_id: ID associated with 'property'. Every property must have a unique ID.
+        Recursively adds a property and its children to the properties window.
+        To show it call PropertyManager.update_property_win().
+        :param property_uid: ID associated with 'property'. Every property must have a unique ID.
         :param property:
         """
-        self._properties[property_id] = property
+        self._properties[property.uid] = property
+        for child_uid in property.children:
+            self.add(property.children[child_uid])
 
-    def remove(self, name: str) -> Property:
+    def remove(self, property_uid: UID) -> Property:
         """
         Recusively removes the property associated with 'name' and all its children.
-        :param name:
+        :param property_uid:
         :return: the removed property
         """
-        prop = self._properties[name]
+        prop = self._properties[property_uid]
         if prop.children:
-            for child in prop.children:
-                self.remove(child)
-        del self._properties[name]
+            for child_uid in prop.children:
+                self.remove(child_uid)
+        del self._properties[property_uid]
+        prop.close()
         return prop
 
-    def get(self, name: str) -> Property:
-        return self._properties[name]
+    def get(self, property_uid: UID) -> Property:
+        return self._properties[property_uid]
 
-    def __contains__(self, item) -> bool:
-        return item in self._properties
+    def __contains__(self, property_uid: UID) -> bool:
+        return property_uid in self._properties
 
-    def __iter__(self):
+    def __iter__(self) -> iter:
         return iter(self._properties)
