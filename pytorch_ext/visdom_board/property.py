@@ -10,6 +10,12 @@ UID = str
 
 
 class Property:
+    """
+    Represents a property to be shown in visdom property window. in addition to property type, property name and
+    property value this class has a UID, a callback to be called when a visdom event associated to this property is
+    raised and a data field to suit any additional need. Moreover Properties are organized in a hierarchical
+    structure, therefore a property can have children properties.
+    """
 
     class Type(enum.Enum):
         text     = enum.auto()
@@ -21,10 +27,6 @@ class Property:
     def __init__(self, uid: UID, property_type: enum.Enum, name: str, init_value: str,
                  on_update: Optional[Callable]=None, data: Optional[Any]=None):
         """
-        Represents a property to be shown in visdom property window. in addition to property type, property name and
-        property value this class has a UID, a callback to be called when a visdom event associated to this property is
-        raised and a data field to suit any additional need. Moreover Properties are organized in a hierarchical
-        structure, therefore a property can have children properties.
         :param property_type: one of Property.Type
         :param name: property name to display
         :param init_value: property value

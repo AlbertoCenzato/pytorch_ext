@@ -1,4 +1,3 @@
-import random
 import os
 import time
 import datetime
@@ -7,6 +6,7 @@ from typing import Tuple
 import torch
 
 from .model_trainer import MTCallback, TrainingCallback, Event
+from ..visdom_board import get_visdom_manager
 
 
 class SupervisedTraining(TrainingCallback):
@@ -199,7 +199,7 @@ class BatchStatistics(MTCallback):
 
 class Checkpoint(MTCallback):
     """
-    Callback for checkpointing the model during training
+    Callback for checkpointing the model during training.
     """
 
     def __init__(self, checkpoint_dir: str, period: int):
@@ -220,3 +220,43 @@ class Checkpoint(MTCallback):
             model_path = os.path.join(self.checkpoint_dir, 'checkpoint_{}.pt'.format(self.checkpoint_counter))
             torch.save(self.trainer.model, model_path)
             self.checkpoint_counter += 1
+
+
+class ProgressiveNetInspector(Checkpoint):
+    """
+    This callback takes a checkpoint of the model and shows it in VisdomBoard
+    """
+
+    def __init__(self, batch_first, *args):
+        super(ProgressiveNetInspector, self).__init__(*args)
+        self.batch_dim = 0 if batch_first else 1
+        self.vm = get_visdom_manager()
+        self.net_inspector = None
+        self.test_tensor   = None
+
+    def __call__(self):
+        super(ProgressiveNetInspector, self).__call__()
+
+        if self.test_tensor is None:
+            self.test_tensor = iter(self.trainer.data_loader_tr).next()
+            if self.test_tensor.size(self.batch_dim) > 1:  # we want batch_size = 1
+                self.test_tensor = self.test_tensor.index_select(dim=self.batch_dim,
+                                                                 index=torch.zeros((1,), dtype=torch.long))
+
+        if self.trainer.current_epoch % self.period == 0:
+            # load checkpointed model
+            model_path = os.path.join(self.checkpoint_dir, 'checkpoint_{}.pt'.format(self.checkpoint_counter))
+            model = torch.load(model_path).cpu()  # NOTE: if the model was trained on GPU the model is first loaded in GPU, then moved to cpu
+            model.eval()
+            for param in model.parameters():
+                param.requires_grad = False
+
+            if hasattr(model, 'set_mode'):
+                model.set_mode('sequence')
+
+            if self.net_inspector:
+                self.net_inspector.close()
+            self.net_inspector = self.vm.get_net_inspector(model, self.test_tensor)
+
+
+

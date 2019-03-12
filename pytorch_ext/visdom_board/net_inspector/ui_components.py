@@ -57,7 +57,7 @@ class CNNSubmoduleButton(Button):
         :param dropdown_list: placeholder param to match on_update function signature, can be leaved empty
         :param old_value: placeholder param to match on_update function signature, can be leaved empty
         """
-        sample_idx = int(self.children[self.batch_select_uid].value['value']) - 1
+        sample_idx  = int(self.children[self.batch_select_uid].value['value']) - 1
         channel_idx = int(self.children[self.chann_select_uid].value['value']) - 1
 
         activations = self.data
