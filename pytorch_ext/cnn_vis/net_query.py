@@ -35,7 +35,13 @@ class NetQuery:
 
         def store_activations(module: nn.Module, input: torch.Tensor, output: torch.Tensor) -> None:
             if not torch.is_tensor(output):
-                output = output[0]
+                if isinstance(output, tuple) or isinstance(output, list):
+                    output = output[0]
+                else:
+                    raise NotImplementedError('Sorry {} is a non-supported data type'.format(output))
+
+            if not torch.is_tensor(output):
+                raise NotImplementedError('Sorry {} is a non-supported data type'.format(output))
 
             activations.append(output)
 
@@ -43,8 +49,9 @@ class NetQuery:
 
         if len(activations) == 0:
             return None
-        
-        if len(activations) > 1: 
+        elif len(activations) == 1:
+            activations = activations[0]
+        else: 
             activations = torch.stack(activations, dim=1)
 
         return activations

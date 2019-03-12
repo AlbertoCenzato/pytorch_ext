@@ -245,7 +245,7 @@ class ProgressiveNetInspector(Checkpoint):
 
         if self.trainer.current_epoch % self.period == 0:
             # load checkpointed model
-            model_path = os.path.join(self.checkpoint_dir, 'checkpoint_{}.pt'.format(self.checkpoint_counter))
+            model_path = os.path.join(self.checkpoint_dir, 'checkpoint_{}.pt'.format(self.checkpoint_counter-1))
             model = torch.load(model_path).cpu()  # NOTE: if the model was trained on GPU the model is first loaded in GPU, then moved to cpu
             model.eval()
             for param in model.parameters():

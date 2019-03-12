@@ -24,7 +24,7 @@ class CNNSubmoduleButton(Button):
         :param data: torch.Tensor containing the activations of the output layer of
                      the submodule associated to this Button
         """
-        super(RNNSubmoduleButton, self).__init__(uid, init_value, on_update, data)
+        super(CNNSubmoduleButton, self).__init__(uid, init_value, on_update, data)
         self.batch_select_uid = uid + ' batch_select'
         self.chann_select_uid = uid + ' channel_select'
         self.active_windows = []
