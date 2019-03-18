@@ -2,7 +2,6 @@ import os
 from typing import Union, List, Optional, Tuple
 
 import numpy as np
-from PIL import Image
 
 import tempfile
 import subprocess
@@ -10,8 +9,6 @@ import subprocess
 import torch
 import torchvision.utils
 import visdom
-
-import plotly.graph_objs as go
 
 from .core import VisObject
 from .html_utils import html_progress_bar
@@ -70,53 +67,12 @@ class ImageWindow(VisObject):
         if not self.check_connection():
             return
 
-        if self._win:
-            self._vis.image(image, win=self._win, env=self._env)
-        else:
-            self._win = self._vis.image(image, env=self._env)
+        options = {'caption': caption}
 
-        #if torch.is_tensor(image):
-        #    image = image.numpy()
-#
-        #pillow_image = Image.fromarray(image)
-        #img_width  = pillow_image.width
-        #img_height = pillow_image.height
-        #scale_factor = 10
-#
-        #layout = go.Layout(
-        #    xaxis=go.layout.XAxis(
-        #        visible=False,
-        #        range=[0, img_width*scale_factor]),
-        #    yaxis=go.layout.YAxis(
-        #        visible=False,
-        #        range=[0, img_height*scale_factor],
-        #        scaleanchor='x'),  # the scaleanchor attribute ensures that the aspect ratio stays constant
-        #    width=img_width*scale_factor,
-        #    height=img_height*scale_factor,
-        #    margin={'l': 0, 'r': 0, 't': 0, 'b': 0},
-        #    images=[go.layout.Image(
-        #        x=0,
-        #        sizex=img_width*scale_factor,
-        #        y=img_height*scale_factor,
-        #        sizey=img_height*scale_factor,
-        #        xref="x",
-        #        yref="y",
-        #        opacity=1.0,
-        #        layer="below",
-        #        #sizing="stretch",
-        #        source=pillow_image)]
-        #)
-        ## we add a scatter trace with data points in opposite corners to give the Autoscale feature a reference point
-        #fig = go.Figure(data=[{
-        #    'x': [0, img_width*scale_factor], 
-        #    'y': [0, img_height*scale_factor], 
-        #    'mode': 'markers',
-        #    'marker': {'opacity': 0}}], layout=layout)
-#
-        #if self._win is None:
-        #    self._win = self._vis.plotlyplot(fig, env=self._env)
-        #else:
-        #    self._vis.plotlyplot(fig, win=self._win, env=self._env)
+        if self._win:
+            self._vis.image(image, opts=options, win=self._win, env=self._env)
+        else:
+            self._win = self._vis.image(image, opts=options, env=self._env)
 
 
 def video_encode(tensor: torch.Tensor, fps: int) -> Tuple[str, tempfile.TemporaryDirectory]:

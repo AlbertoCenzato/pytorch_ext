@@ -187,7 +187,7 @@ class BatchStatistics(MTCallback):
             self.running_loss = 0.0    # reset running loss at epoch begin
 
         self.running_loss += self.trainer.last_batch_loss
-        if (batch % self.logging_period) == self.logging_period-1:  # print every time one-tenth of the dataset has been processed
+        if (batch % self.logging_period) == self.logging_period-1:
             epoch = self.trainer.current_epoch
             dataset_size = len(self.trainer.data_loader_tr)
             mean_loss = self.running_loss / self.logging_period  # print mean loss over the processed batches
@@ -239,6 +239,12 @@ class ProgressiveNetInspector(Checkpoint):
 
         if self.test_tensor is None:
             self.test_tensor = iter(self.trainer.data_loader_tr).next()
+            if isinstance(self.test_tensor, list) or isinstance(self.test_tensor, tuple):
+                self.test_tensor = self.test_tensor[0]
+
+            if not torch.is_tensor(self.test_tensor):
+                raise ValueError('{} has an unsupported data type'.format(self.test_tensor))
+
             if self.test_tensor.size(self.batch_dim) > 1:  # we want batch_size = 1
                 self.test_tensor = self.test_tensor.index_select(dim=self.batch_dim,
                                                                  index=torch.zeros((1,), dtype=torch.long))

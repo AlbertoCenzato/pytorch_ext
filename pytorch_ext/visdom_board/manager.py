@@ -93,7 +93,7 @@ class VisdomManager:
     def close(self, env: str) -> None:
         self.vis.close(win=None, env=env)
 
-    def close_all(self):
+    def close_all(self) -> None:
         if not self.is_connection_available():
             return
 

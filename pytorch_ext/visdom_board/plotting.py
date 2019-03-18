@@ -3,6 +3,8 @@ from typing import Optional
 import numpy as np
 import plotly.graph_objs as go
 
+import torch
+
 import visdom
 
 from .core import VisObject
@@ -187,11 +189,13 @@ class HistogramPlot(Plot):
         super(HistogramPlot, self).__init__(vis, env, title, xaxis, yaxis)
         self.opts['numbins'] = bins
 
-    def plot(self, data: np.array) -> None:
-        if self._win is None:
-            self._win = self._vis.histogram(X=data, opts=self.opts, env=self._env)
+    def plot(self, data: torch.Tensor) -> None:
+        hist_data = data.contiguous().view(-1)
+
+        if self._win:
+            self._vis.histogram(X=hist_data, opts=self.opts, win=self._win, env=self._env)
         else:
-            self._vis.histogram(X=data, opts=self.opts, win=self._win, env=self._env)
+            self._win = self._vis.histogram(X=hist_data, opts=self.opts, env=self._env)
 
 
 class RibbonPlot(Plot):

@@ -13,7 +13,6 @@ class VisObject:
     def check_connection(self) -> bool:
         return not (self._vis is None)
 
-    # FIXME: this method works only in debug mode, don't know why...
     def close(self):
         if not self.check_connection() or self._win is None:
             return

@@ -41,7 +41,7 @@ class NetInspector:
 
         self.properties_manager.update_property_win()
 
-    def _submodule_button_on_click(self, button: Button, module_uid: str) -> None:
+    def _button_on_click(self, button: Button, module_uid: str) -> None:
         button_state = button.state
         if button_state == Button.State.RELEASED:  # remove children
             button.remove_all_children()
@@ -59,32 +59,34 @@ class NetInspector:
     def _build_submodule_button(self, module_uid: str) -> Button:
         activations = self.net_query.get_activations(self.test_tensor, module_uid)
         if activations is None:
-            button = Button(module_uid, module_uid, self._submodule_button_on_click)
+            button = Button(module_uid, module_uid, self._button_on_click)
         else:
             dimensions = len(activations.size())
             if dimensions == 5:
-                button = RNNSubmoduleButton(module_uid, module_uid, self._submodule_button_on_click, activations, self._vis)
+                button = RNNSubmoduleButton(module_uid, module_uid, self._button_on_click, activations, self._vis)
                 button.init_children()
             elif dimensions == 4:
-                button = CNNSubmoduleButton(module_uid, module_uid, self._submodule_button_on_click, activations, self._vis)
+                button = CNNSubmoduleButton(module_uid, module_uid, self._button_on_click, activations, self._vis)
                 button.init_children()
             elif dimensions == 3:
                 old_shape = activations.size()
                 height = int(math.sqrt(old_shape[2]))
                 if old_shape[2] % height != 0:
-                    raise NotImplementedError('Only power of two feature sizes are supported for 3D output tensors')
-                new_shape = (old_shape[0], old_shape[1], 1, height, height)
+                    new_shape = (old_shape[0], old_shape[1], 1, 16, -1)
+                else:
+                    new_shape = (old_shape[0], old_shape[1], 1, height, height)
                 activations = activations.view(new_shape)
-                button = RNNSubmoduleButton(module_uid, module_uid, self._submodule_button_on_click, activations, self._vis)
+                button = RNNSubmoduleButton(module_uid, module_uid, self._button_on_click, activations, self._vis)
                 button.init_children()
             elif dimensions == 2:
                 old_shape = activations.size()
                 height = int(math.sqrt(old_shape[1]))
                 if old_shape[1] % height != 0:
-                    raise NotImplementedError('Only power of two feature sizes are supported for 2D output tensors')
-                new_shape = (old_shape[0], 1, height, height)
+                    new_shape = (old_shape[0], 1, 16, -1)
+                else:
+                    new_shape = (old_shape[0], 1, height, height)
                 activations = activations.view(new_shape)
-                button = CNNSubmoduleButton(module_uid, module_uid, self._submodule_button_on_click, activations, self._vis)
+                button = CNNSubmoduleButton(module_uid, module_uid, self._button_on_click, activations, self._vis)
                 button.init_children()
             else:
                 raise NotImplementedError('Tensors with a number of dimensions < 2 or > 5 are not supported')
