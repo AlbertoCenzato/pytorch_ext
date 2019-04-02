@@ -7,7 +7,7 @@ import torch
 
 import visdom
 
-from .core import VisObject
+from .core import VisObject, check_connection
 
 
 colorscale = ['rgba(229,   0,  53, 255)', 
@@ -90,23 +90,25 @@ class LinePlot(Plot):
                  title='', xaxis='', yaxis=''):
         super(LinePlot, self).__init__(vis, env, title, xaxis, yaxis)
 
+    @check_connection
     def plot(self, x: np.array, y: np.array) -> None:
-        if not self.check_connection():
-            return
+        # if not self.check_connection():
+        #     return
 
-        if self._win is None:
-            self._win = self._vis.line(X=x, Y=y, opts=self.opts, env=self._env)
+        if self._win:
+            self._vis.line(X=x, Y=y, opts=self.opts, win=self._win, env=self._env)
         else:
-            self._vis.line(X=x, Y=y, opts=self.opts, win= self._win, env=self._env)
+            self._win = self._vis.line(X=x, Y=y, opts=self.opts, env=self._env)
 
+    @check_connection
     def append(self, x: np.array, y: np.array) -> None:
-        if not self.check_connection():
-            return
+        # if not self.check_connection():
+        #     return
 
-        if self._win is None:
-            self._win = self._vis.line(X=x, Y=y, opts=self.opts, env=self._env)
-        else:
+        if self._win:
             self._vis.line(X=x, Y=y, win=self._win, opts=self.opts, env=self._env, update='append')
+        else:
+            self._win = self._vis.line(X=x, Y=y, opts=self.opts, env=self._env)
 
 
 class LineStdPlot(Plot):
@@ -147,9 +149,10 @@ class LineStdPlot(Plot):
                         )
                     )
 
+    @check_connection
     def plot(self, mean: np.array, std: np.array, trace_id: str) -> None:
-        if not self.check_connection():
-            return 
+        # if not self.check_connection():
+        #     return
 
         upper = mean + std
         lower = mean - std
@@ -175,10 +178,12 @@ class LineStdPlot(Plot):
                       )
         self.data = self.data + [upper_bound, error_line]
         fig = go.Figure(data=self.data, layout=self.layout)
-        if self._win is None:
-            self._win = self._vis.plotlyplot(fig, env=self._env)
-        else:
+
+        if self._win:
             self._vis.plotlyplot(fig, win=self._win, env=self._env)
+        else:
+            self._win = self._vis.plotlyplot(fig, env=self._env)
+
         self.color_index += self.color_increment
 
 
@@ -189,6 +194,7 @@ class HistogramPlot(Plot):
         super(HistogramPlot, self).__init__(vis, env, title, xaxis, yaxis)
         self.opts['numbins'] = bins
 
+    @check_connection
     def plot(self, data: torch.Tensor) -> None:
         hist_data = data.contiguous().view(-1)
 
@@ -211,6 +217,7 @@ class RibbonPlot(Plot):
                        'xaxis': {'title': self.xaxis, 'automargin': True}, 
                        'yaxis': {'title': self.yaxis, 'automargin': True}}
 
+    @check_connection
     def plot(self, data: np.array) -> None:
         hist_data, bin_edges = np.histogram(data, bins=self._bins)
         bin_centers = (bin_edges + (bin_edges[1] - bin_edges[0])/2)[:-1]
@@ -227,9 +234,9 @@ class RibbonPlot(Plot):
 
         fig = {'data': self._traces, 'layout': self.layout}  # go.Figure(data=self._traces, layout=self.layout)
 
-        if self._win is None:
-            self._win = self._vis.plotlyplot(fig, env=self._env)
-        else:
+        if self._win:
             self._vis.plotlyplot(fig, win=self._win, env=self._env)
+        else:
+            self._win = self._vis.plotlyplot(fig, env=self._env)
 
         self._counter += 1

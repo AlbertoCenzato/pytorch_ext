@@ -56,12 +56,16 @@ class NetQuery:
 
         return activations
 
-    # FIXME: this method was written before SubmodulesTree
-    # def get_weights(self, input: torch.Tensor, module_name: str=''):
-    #     if len(self.modules) == 0:
-    #         self._store_modules_topological(input)
-    #
-    #     return [(module[0], module[1].parameters(recurse=False)) for module in self.modules if module_name in module[0]]
+    def get_weights(self, module_uid: str=''):
+        weights = []
+
+        def retrieve_weights(module) -> None:
+            if module_uid == module.uid:
+                weights.extend(module.parameters(recurse=False))
+
+        self.model_graph.model.apply(retrieve_weights)
+
+        return weights
 
     def _apply_hook(self, hook: Callable, input: torch.Tensor, module_uid: str='') -> None:
         handles = []

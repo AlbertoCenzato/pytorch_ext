@@ -215,7 +215,6 @@ class ModelTrainer:
     # ----- private functions -----
 
     def _train_epoch(self) -> None:
-        self.running_loss = 0.0
         for batch_index, data in enumerate(self.data_loader_tr, 0):
             self.current_batch = batch_index
             if torch.is_tensor(data):

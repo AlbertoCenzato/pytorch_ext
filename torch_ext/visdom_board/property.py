@@ -1,5 +1,5 @@
 import enum
-from typing import Callable, List, Dict, Any, Optional
+from typing import Callable, List, Dict, Any, Optional, Union
 
 from visdom import Visdom
 
@@ -24,7 +24,7 @@ class Property:
         checkbox = enum.auto()
         select   = enum.auto()
 
-    def __init__(self, uid: UID, property_type: enum.Enum, name: str, init_value: str,
+    def __init__(self, uid: UID, property_type: enum.Enum, name: str, init_value: Union[str, int, bool],
                  on_update: Optional[Callable]=None, data: Optional[Any]=None):
         """
         :param property_type: one of Property.Type
@@ -86,6 +86,13 @@ class Property:
         pass
 
 
+class PropertyContainer(Property):
+
+    def __init__(self, uid: UID, on_update: Optional[Callable]=None, data: Optional[Any]=None):
+        super(PropertyContainer, self).__init__(uid, Property.Type.text, '', '', on_update, data)
+        self.value = {}
+
+
 class DropdownList(Property):
 
     def __init__(self, uid: UID, name: str, values: List[str], init_value: int=0,
@@ -112,6 +119,13 @@ class Button(Property):
 
         old_value = self.value['value']
         self.on_update(self, old_value)
+
+
+class Checkbox(Property):
+
+    def __init__(self, uid: UID, name: str, init_value: bool=False, on_update: Optional[Callable]=None,
+                 data: Optional[Any]=None):
+        super(Checkbox, self).__init__(uid, Property.Type.checkbox, name, init_value, on_update, data)
 
 
 def get_child_properties(property: Property) -> List[Property]:

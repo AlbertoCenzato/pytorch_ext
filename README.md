@@ -5,13 +5,13 @@ Furthermore the VisdomBoard package builds on top of [visdom](https://github.com
 
 ### ModelTrainer
 ModelTrainer avoids you to write a custom training loop each time you have to train a model. Given that each model and each training is different, ModelTrainer provides the training backbone and can be easily extended using callbacks to suit any specific needs. \
-You are required to write only a small callable object that inherits from `pytorch_ext.model_trainer.TrainingCallback` that takes care of feeding data to the model and uses its output to compute the loss. 
+You are required to write only a small callable object that inherits from `torch_ext.model_trainer.TrainingCallback` that takes care of feeding data to the model and uses its output to compute the loss. 
 
 ```
 import torch
 
-from pytorch_ext.model_trainer import ModelTrainer
-from pytorch_ext.model_trainer import TrainingCallback
+from torch_ext.model_trainer import ModelTrainer
+from torch_ext.model_trainer import TrainingCallback
 
 
 class SupervisedTraining(TrainingCallback):
@@ -39,7 +39,7 @@ That's it. `TrainingCallback` defines a `trainer` attribute that is used to acce
 You can even define some ModelTrainer callback objects (MTCallback) to perform some actions during training. For example if you want your model to be periodically saved during training you could do something along these lines:
 
 ```
-from pytorch_ext.model_trainer import MTCallback, Event
+from torch_ext.model_trainer import MTCallback, Event
 
 
 class Checkpoint(MTCallback):
@@ -59,7 +59,7 @@ trainer.attach_callback(Chackpoint('.'))
 trainer.run(model, training_set, training_callback=SupervisedTraining())
 ```
 
-To specify when the MTCallback object has to be called you must assign to `self.event` one of the values of `pytorch_ext.model_trainer.Event` 
+To specify when the MTCallback object has to be called you must assign to `self.event` one of the values of `torch_ext.model_trainer.Event` 
 
 To see the documentation and more examples take a look at model_training.model_trainer or model_training.callbacks.
 

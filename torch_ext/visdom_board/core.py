@@ -1,6 +1,17 @@
-from typing import Optional
+from typing import Optional, Callable, Any
 
 import visdom
+
+
+def check_connection(function: Callable) -> Callable:
+
+    def placeholder(self, *args, **kwargs) -> Any:
+        if self._vis:
+            return function(self, *args, **kwargs)
+        else:
+            return
+
+    return placeholder
 
 
 class VisObject:

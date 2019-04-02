@@ -10,8 +10,7 @@ import torch
 import torchvision.utils
 import visdom
 
-from .core import VisObject
-from .html_utils import html_progress_bar
+from .core import VisObject, check_connection
 
 
 # typedef
@@ -23,18 +22,20 @@ class OutputConsole(VisObject):
     def __init__(self, vis: visdom.Visdom, env: Optional[str]=None):
         super(OutputConsole, self).__init__(vis, env)
 
+    @check_connection
     def print(self, text: str) -> None:
-        if not self.check_connection():     # TODO: find a way to move this check into the base class
-            return
+        # if not self.check_connection():     # TODO: find a way to move this check into the base class
+        #     return
 
         if self._win is None:
             self._win = self._vis.text(text, env=self._env)
         else:
             self._vis.text(text, win=self._win, append=True, env=self._env)
 
+    @check_connection
     def clear_console(self) -> None:
-        if not self.check_connection():
-            return 
+        # if not self.check_connection():
+        #     return
 
         if self._win is None:
             self._win = self._vis.text('', env=self._env)
@@ -42,30 +43,15 @@ class OutputConsole(VisObject):
             self._vis.text('', win=self._win, append=False, env=self._env)
 
 
-class ProgressBar(VisObject):
-
-    def __init__(self, vis: visdom.Visdom, env: Optional[str]=None, title: str=''):
-        super(ProgressBar, self).__init__(vis, env)
-        self._title = title
-
-    def update(self, current_index: int, total: int):
-        if not self.check_connection():
-            return
-        
-        if self._win is None:
-            self._win = self._vis.text(html_progress_bar(self._title, current_index, total), env=self._env, append=False)
-        else:
-            self._vis.text(html_progress_bar(self._title, current_index, total), win=self._win, env=self._env, append=False)
-
-
 class ImageWindow(VisObject):
 
     def __init__(self, vis: visdom.Visdom, env: str=None):
         super(ImageWindow, self).__init__(vis, env)
 
+    @check_connection
     def imshow(self, image: Union[np.array, torch.Tensor], caption: str='') -> None:
-        if not self.check_connection():
-            return
+        # if not self.check_connection():
+        #     return
 
         options = {'caption': caption}
 
@@ -123,6 +109,7 @@ class VideoWindow(VisObject):
         self.fps = fps
         self.opts = dict(fps=fps)
 
+    @check_connection
     def play_video(self, video: torch.Tensor) -> None:
         assert video.dim() == 3
 

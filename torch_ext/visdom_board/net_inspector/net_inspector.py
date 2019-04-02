@@ -1,6 +1,4 @@
-from typing import List
-
-import math
+from typing import Union, List
 
 import torch
 from torch import nn
@@ -8,11 +6,14 @@ from torch import nn
 from visdom import Visdom
 
 from ..property import PropertiesManager, Button
-from .ui_components import CNNSubmoduleButton, RNNSubmoduleButton
+from .ui_components import CNNSubmoduleButton, RNNSubmoduleButton, MultipleChoice
 
-from pytorch_ext.cnn_vis import NetQuery, SubmodulesTree
+from torch_ext.cnn_vis import NetQuery, SubmodulesTree
 
 from .common import *
+
+
+MULTICHOICE_UID = 'inspection_mode_selection'
 
 
 class NetInspector:
@@ -26,6 +27,7 @@ class NetInspector:
         self.properties_manager = PropertiesManager(vis, NET_INSPECTOR_ENV)
         self.model = SubmodulesTree(model)
         self.net_query = NetQuery(self.model)
+        self._modes = ['weights', 'gradients', 'activations']
 
         self._init_properties()
 
@@ -34,6 +36,9 @@ class NetInspector:
         Initializes the UI.
         """
         root_uid = self.model.root()
+
+        multichoice = MultipleChoice(MULTICHOICE_UID, self._modes)
+        self.properties_manager.add(multichoice)
 
         for child_uid in self.model.children(root_uid):
             button = self._build_submodule_button(child_uid)
@@ -57,41 +62,38 @@ class NetInspector:
         self.properties_manager.update_property_win()
 
     def _build_submodule_button(self, module_uid: str) -> Button:
-        activations = self.net_query.get_activations(self.test_tensor, module_uid)
-        if activations is None:
+        multichoice = self.properties_manager.get(MULTICHOICE_UID)
+        mode = self._modes[multichoice.get_selection()]
+
+        data = self._query_network(mode, module_uid)
+
+        if data is None:
             button = Button(module_uid, module_uid, self._button_on_click)
         else:
-            dimensions = len(activations.size())
-            if dimensions == 5:
-                button = RNNSubmoduleButton(module_uid, module_uid, self._button_on_click, activations, self._vis)
-                button.init_children()
-            elif dimensions == 4:
-                button = CNNSubmoduleButton(module_uid, module_uid, self._button_on_click, activations, self._vis)
-                button.init_children()
-            elif dimensions == 3:
-                old_shape = activations.size()
-                height = int(math.sqrt(old_shape[2]))
-                if old_shape[2] % height != 0:
-                    new_shape = (old_shape[0], old_shape[1], 1, 16, -1)
-                else:
-                    new_shape = (old_shape[0], old_shape[1], 1, height, height)
-                activations = activations.view(new_shape)
-                button = RNNSubmoduleButton(module_uid, module_uid, self._button_on_click, activations, self._vis)
-                button.init_children()
-            elif dimensions == 2:
-                old_shape = activations.size()
-                height = int(math.sqrt(old_shape[1]))
-                if old_shape[1] % height != 0:
-                    new_shape = (old_shape[0], 1, 16, -1)
-                else:
-                    new_shape = (old_shape[0], 1, height, height)
-                activations = activations.view(new_shape)
-                button = CNNSubmoduleButton(module_uid, module_uid, self._button_on_click, activations, self._vis)
-                button.init_children()
+            dimensions = len(data.size())
+            if dimensions == 5 or dimensions == 3:
+                button = RNNSubmoduleButton(module_uid, module_uid, self._button_on_click, data, self._vis)
+            elif dimensions == 4 or dimensions == 2:
+                button = CNNSubmoduleButton(module_uid, module_uid, self._button_on_click, data, self._vis)
             else:
                 raise NotImplementedError('Tensors with a number of dimensions < 2 or > 5 are not supported')
 
+            button.init_children()
+
         return button
+
+    def _query_network(self, mode: str, module_uid: UID) -> Union[torch.Tensor, List[torch.Tensor]]:
+        if mode == 'activations':
+            data = self.net_query.get_activations(self.test_tensor, module_uid)
+        elif mode == 'gradients':
+            raise NotImplementedError()
+        elif mode == 'weights':
+            raise NotImplementedError()  # TODO: deal with data as list
+            data = self.net_query.get_weights(module_uid)
+        else:
+            ValueError
+
+        return data
 
     def close(self):
         self.properties_manager.close()

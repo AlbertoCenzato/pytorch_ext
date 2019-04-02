@@ -1,7 +1,7 @@
 import os
 import time
 import datetime
-from typing import Tuple
+from typing import Tuple, Callable
 
 import torch
 
@@ -9,16 +9,25 @@ from .model_trainer import MTCallback, TrainingCallback, Event
 from ..visdom_board import get_visdom_manager
 
 
+# --------------------------- Training Callbacks ------------------------------------
+
 class SupervisedTraining(TrainingCallback):
     """
-        Trains a model that receives as input an (input data, label) tuple.
-        Useful in most supervised training scenarios.
+    Trains a model that receives as input an (input data, label) tuple.
+    Useful in most supervised training scenarios.
     """
 
     def __call__(self, data_label_tuple: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         data, label = data_label_tuple
         output = self.trainer.model(data)
         return self.trainer.loss_fn(output, label)
+
+
+class AutoencoderTraining(TrainingCallback):
+
+    def __call__(self, data):
+        reconstruction = self.trainer.model(data)
+        return self.trainer.loss_fn(reconstruction, data)
 
 
 class RNNSequenceTrainer(TrainingCallback):
@@ -50,76 +59,7 @@ class RNNStepByStepTrainer(TrainingCallback):
         return sequence_loss
 
 
-class RNNLongTermPredictionEvaluator(MTCallback):
-
-    BUFFERED_FRAMES = 4
-
-    def __init__(self, early_stopping_threshold: float=0.008):
-        super(RNNLongTermPredictionEvaluator, self).__init__()
-        self.event = Event.ON_EPOCH_END
-        self.requires_grad = []
-        self.early_stop_thr = early_stopping_threshold
-        self.valid_loss_plot = None
-
-    def on_attach(self):
-        vm = self.trainer.vm
-        self.valid_loss_plot = vm.get_line_plot(
-                                    env='Training',
-                                    title='Validation loss',
-                                    xaxis='epochs',
-                                    yaxis='loss'
-                                )
-
-    def __call__(self) -> None:
-        if self.trainer.validation_data_loader:
-            loss = self.evaluate_loss(self.trainer.current_epoch)
-            if loss < self.early_stop_thr:
-                self.trainer.epochs = self.trainer.current_epoch
-
-    def evaluate_loss(self, epoch: int) -> float:
-        model = self.trainer.model
-        if hasattr(model, 'set_mode'):
-            old_mode = model.set_mode('step-by-step')
-
-        self._freeze_model(model)
-
-        total_loss = 0.0
-        for data in iter(self.trainer.validation_data_loader):
-            data = data.to(self.trainer.device)
-            sequence_len = data.size(1)
-            sequence_loss = 0.0
-            state = model.init_hidden(data.size(0))
-            for t in range(sequence_len - 1):
-                if t < RNNLongTermPredictionEvaluator.BUFFERED_FRAMES:
-                    output, state = model(data[:, t, :], state)
-                else:
-                    output, state = model(output, state)
-                sequence_loss += self.trainer.loss_fn(output, data[:, t+1, :]).item()
-            total_loss += sequence_loss / (sequence_len - 1)
-            
-        loss = total_loss/len(self.trainer.validation_data_loader)
-        self.valid_loss_plot.append([epoch+1], [loss])
-
-        if hasattr(model, 'set_mode'):
-            model.set_mode('sequence')
-
-        self._unfreeze_model(model)
-        if hasattr(model, 'set_mode'):
-            model.set_mode(old_mode)
-        return loss
-
-    def _freeze_model(self, model: torch.nn.Module) -> None:
-        model.eval()
-        self.requires_grad = []
-        for param in model.parameters():  # WARNING: looping in this way assumes that model parameters are always yielded in the same order
-            self.requires_grad.append(param.requires_grad)
-            param.requires_grad = False
-
-    def _unfreeze_model(self, model: torch.nn.Module) -> None:
-        model.train()
-        for i, param in enumerate(model.parameters()):  # WARNING: looping in this way assumes that model parameters are always yielded in the same order
-            param.requires_grad = self.requires_grad[i]
-
+# --------------------------- Other Callbacks ------------------------------------
 
 class TrainingTimeEstimation(MTCallback):
     """
@@ -146,9 +86,9 @@ class TrainingTimeEstimation(MTCallback):
             estimated_time_per_epoch = self.cumulative_epochs_times / self.trainer.current_epoch
             remaining_epochs = self.trainer.epochs - self.trainer.current_epoch
 
-            self.console.clear_console()
             eta = estimated_time_per_epoch * remaining_epochs
             time_delta = datetime.timedelta(seconds=int(eta))
+            self.console.clear_console()
             self.console.print('ETA: {}'.format(time_delta))
 
             self.epoch_start_time = end
@@ -163,6 +103,7 @@ class BatchStatistics(MTCallback):
         """
         :param period: plotting period expressed in number of batches
         """
+        super(BatchStatistics, self).__init__()
         self.event = Event.ON_BATCH_END
         self.logging_period = period
         self.running_loss = 0.0
@@ -174,8 +115,9 @@ class BatchStatistics(MTCallback):
     def on_attach(self) -> None:
         vm = self.trainer.vm
         with vm.environment('Training'):
-            self.console   = vm.get_output_console()
+            self.console   = vm.get_output_console(env=None)
             self.loss_plot = vm.get_line_plot(
+                                env=None,
                                 title='Training loss',
                                 xaxis='epochs',
                                 yaxis='loss'
@@ -265,4 +207,31 @@ class ProgressiveNetInspector(Checkpoint):
             self.net_inspector = self.vm.get_net_inspector(model, self.test_tensor)
 
 
+class BatchSizeScheduler(MTCallback):
+    """
+    This callback reinstantiates a DataLoader object at the beginning of each epoch based on
+    the batch size scheduling function provided by the user. The scheduling function signature is:
+        def scheduler(batch_size, epoch, loss)
+    where 'loss' is the loss of the last processed batch in the previous epoch. The scheduling
+    function should return the new batch size. If new batch size == batch_size then BatchSizeScheduler
+    keeps using the old DataLoader.
+    """
 
+    def __init__(self, scheduler: Callable, **data_loader_kwargs):     #
+        super(BatchSizeScheduler, self).__init__()
+        self.event = Event.ON_EPOCH_BEGIN
+        self.scheduler = scheduler
+        self.data_loader_kwargs = data_loader_kwargs
+
+    def __call__(self):
+        if self.scheduler is None:
+            pass
+
+        batch_size = self.trainer.data_loader_tr.batch_size
+        epoch = self.trainer.current_epoch
+        loss  = self.trainer.last_batch_loss
+
+        new_batch_size = self.scheduler(batch_size, epoch, loss)
+        if new_batch_size != batch_size:
+            dataset = self.trainer.data_loader_tr.dataset
+            self.trainer.data_loader_tr = torch.utils.data.DataLoader(dataset, new_batch_size, **self.data_loader_kwargs)
