@@ -56,7 +56,7 @@ class RepeatAlongAxis:
         and torch.Tensor.
     """
 
-    def __init__(self, transform: Callable, axis: int):
+    def __init__(self, transform: Callable, axis: int=0):
         self.transform = transform
         self.axis = axis
 

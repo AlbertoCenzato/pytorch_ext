@@ -56,7 +56,7 @@ class TrainingCallback:
         self.trainer = None
 
     @abc.abstractmethod
-    def __call__(self, batch: torch.Tensor) -> torch.Tensor:
+    def __call__(self, model: torch.nn.Module, batch: torch.Tensor, loss_fn: Callable) -> torch.Tensor:
         raise NotImplementedError()
 
     def on_attach(self):
@@ -69,13 +69,6 @@ class TrainingCallback:
         See BatchStatistics for an example.
         """
         pass
-
-
-# TODO: ModelTrainerParams does not contain batch_size!!!
-class ModelTrainerParams:
-
-    def __init__(self, epochs):
-        self.epochs = epochs
 
 
 class ModelTrainer:
@@ -128,7 +121,7 @@ class ModelTrainer:
 
         # callbacks
         class StubCallback(TrainingCallback):
-            def __call__(self, batch: torch.Tensor):
+            def __call__(self, model, batch, loss_fn):
                 raise NotImplementedError('You should specify a batch training callback ' +
                                           'using ModelTrainer.add_batch_training_callback()')
         self._batch_training = None
@@ -166,9 +159,6 @@ class ModelTrainer:
             call_all(self._post_epoch_actions)
 
         call_all(self._post_training_actions)
-    
-    def save_params(self) -> ModelTrainerParams:
-        return ModelTrainerParams(self.epochs)
 
     def attach_callback(self, callback: MTCallback) -> ModelTrainer:
         callback.trainer = self
@@ -199,10 +189,10 @@ class ModelTrainer:
         For example a common use case for a supervised labeling task could be:
 
         class ExampleSupervisedBatchTrainer(TrainingCallback):
-            def __call__(self, batch) -> torch.Tensor:
+            def __call__(self, model, batch, loss_fn) -> torch.Tensor:
                 data, labels = batch
-                output = self.trainer.model(data)
-                return self.trainer.loss_fn(output, labels)
+                output = model(data)
+                return loss_fn(output, labels)
 
         The callback must return a torch.Tensor representing the loss for the given batch.
         ModelTrainer will then take care of the backpropagation an weights update.
@@ -225,7 +215,7 @@ class ModelTrainer:
             call_all(self._pre_batch_actions)
 
             self.optimizer.zero_grad()  # reset parameters gradient
-            batch_loss = self._batch_training(data)
+            batch_loss = self._batch_training(self.model, data, self.loss_fn)
             batch_loss.backward()        
             self.optimizer.step()
 

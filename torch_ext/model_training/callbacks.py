@@ -4,6 +4,8 @@ import datetime
 from typing import Tuple, Callable
 
 import torch
+from torch import Tensor
+import torch.nn as nn
 
 from .model_trainer import MTCallback, TrainingCallback, Event
 from ..visdom_board import get_visdom_manager
@@ -17,17 +19,18 @@ class SupervisedTraining(TrainingCallback):
     Useful in most supervised training scenarios.
     """
 
-    def __call__(self, data_label_tuple: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+    def __call__(self, model: nn.Module, data_label_tuple: Tuple[Tensor, Tensor],
+                 loss_fn: Callable) -> Tensor:
         data, label = data_label_tuple
-        output = self.trainer.model(data)
-        return self.trainer.loss_fn(output, label)
+        output = model(data)
+        return loss_fn(output, label)
 
 
 class AutoencoderTraining(TrainingCallback):
 
-    def __call__(self, data):
-        reconstruction = self.trainer.model(data)
-        return self.trainer.loss_fn(reconstruction, data)
+    def __call__(self, model: nn.Module, data: Tensor, loss_fn: Callable) -> Tensor:
+        reconstruction = model(data)
+        return loss_fn(reconstruction, data)
 
 
 class RNNSequenceTrainer(TrainingCallback):
@@ -35,9 +38,9 @@ class RNNSequenceTrainer(TrainingCallback):
     Trains a recurrent model that receives as input the whole sequence
     """
 
-    def __call__(self, data_batch: torch.Tensor) -> torch.Tensor:
-        output, _ = self.trainer.model(data_batch)
-        return self.trainer.loss_fn(output[:-1], data_batch[1:])
+    def __call__(self, model: nn.Module, data_batch: torch.Tensor, loss_fn: Callable) -> Tensor:
+        output, _ = model(data_batch)
+        return loss_fn(output[:-1], data_batch[1:])
 
 
 class RNNStepByStepTrainer(TrainingCallback):
@@ -45,16 +48,16 @@ class RNNStepByStepTrainer(TrainingCallback):
     Trains a recurrent model that receives as input a single time frame
     """
 
-    def __call__(self, data_batch: torch.Tensor) -> torch.Tensor:
+    def __call__(self, model: nn.Module, data_batch: Tensor, loss_fn: Callable) -> Tensor:
         # checking data.size(0) at each call instead of storing self.batch_size 
         # because if (training data len % self.batch_size != 0) then the last
         # batch does not have self.batch_size elements
-        state = self.trainer.model.init_hidden(data_batch.size(0))
+        state = model.init_hidden(data_batch.size(0))
         sequence_loss = torch.zeros(1).to(self.trainer.device)
         for t in range(data_batch.size(1)-1):
-            output, state = self.trainer.model(data_batch[:, t, :], state)
+            output, state = model(data_batch[:, t, :], state)
             ground_truth = data_batch[:, t+1, :]
-            sequence_loss += self.trainer.loss_fn(output, ground_truth)
+            sequence_loss += loss_fn(output, ground_truth)
         
         return sequence_loss
 
