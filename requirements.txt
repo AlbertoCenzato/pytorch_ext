@@ -2,4 +2,3 @@ numpy==1.15.4
 plotly==3.4.2
 https://download.pytorch.org/whl/cu100/torch-1.0.0-cp37-cp37m-win_amd64.whl
 torchvision==0.2.1
-visdom==0.1.8.7

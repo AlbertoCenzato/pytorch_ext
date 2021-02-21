@@ -9,8 +9,6 @@ from torch.nn import Module
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
-from .. import visdom_board
-
 
 def call_all(callables: List[Callable]) -> None:
     for f in callables:
@@ -88,7 +86,6 @@ class ModelTrainer:
         current_batch: int
         last_batch_loss: float
         device: torch.device
-        vm: visdom_board.VisdomManager
         model: torch.nn.Module
         data_loader_tr: torch.utils.data.DataLoader
         data_loader_va: torch.utils.data.DataLoader
@@ -132,9 +129,6 @@ class ModelTrainer:
         self._post_batch_actions    = []
         self._post_epoch_actions    = []
         self._post_training_actions = []
-
-        # initialize VisdomBoard tools
-        self.vm = visdom_board.get_visdom_manager()
 
     def run(self, model: Module, training_set: DataLoader, training_callback: Optional[TrainingCallback]=None,
             validation_set: Optional[DataLoader] = None) -> None:

@@ -8,7 +8,6 @@ from torch import Tensor
 import torch.nn as nn
 
 from .model_trainer import MTCallback, TrainingCallback, Event
-from ..visdom_board import get_visdom_manager
 
 
 # --------------------------- Training Callbacks ------------------------------------
@@ -76,10 +75,6 @@ class TrainingTimeEstimation(MTCallback):
         self.cumulative_epochs_times = 0.0
         self.console = None
 
-    def on_attach(self):
-        vm = self.trainer.vm
-        self.console = vm.get_output_console(env='Training')
-
     def __call__(self) -> None:
         if not self.epoch_start_time:
             self.epoch_start_time = time.time()
@@ -91,8 +86,7 @@ class TrainingTimeEstimation(MTCallback):
 
             eta = estimated_time_per_epoch * remaining_epochs
             time_delta = datetime.timedelta(seconds=int(eta))
-            self.console.clear_console()
-            self.console.print('ETA: {}'.format(time_delta))
+            print(f'ETA: {time_delta}')
 
             self.epoch_start_time = end
 
@@ -112,20 +106,6 @@ class BatchStatistics(MTCallback):
         self.running_loss = 0.0
         self.dataset_size = 0
 
-        self.console   = None
-        self.loss_plot = None
-
-    def on_attach(self) -> None:
-        vm = self.trainer.vm
-        with vm.environment('Training'):
-            self.console   = vm.get_output_console(env=None)
-            self.loss_plot = vm.get_line_plot(
-                                env=None,
-                                title='Training loss',
-                                xaxis='epochs',
-                                yaxis='loss'
-                            )
-
     def __call__(self) -> None:
         batch = self.trainer.current_batch
         if batch == 0:
@@ -136,9 +116,7 @@ class BatchStatistics(MTCallback):
             epoch = self.trainer.current_epoch
             dataset_size = len(self.trainer.data_loader_tr)
             mean_loss = self.running_loss / self.logging_period  # print mean loss over the processed batches
-            self.console.print('[epoch: {:.0f}, batch: {:.0f}] - loss: {:.3f}'
-                               .format(epoch + 1, batch + 1, mean_loss))
-            self.loss_plot.append([epoch + batch / dataset_size], [mean_loss])
+            print(f'[epoch: {epoch + 1}, batch: {batch + 1}] - loss: {mean_loss}')
             self.running_loss = 0.0
 
 
@@ -175,7 +153,6 @@ class ProgressiveNetInspector(Checkpoint):
     def __init__(self, batch_first, *args):
         super(ProgressiveNetInspector, self).__init__(*args)
         self.batch_dim = 0 if batch_first else 1
-        self.vm = get_visdom_manager()
         self.net_inspector = None
         self.test_tensor   = None
 
@@ -205,9 +182,9 @@ class ProgressiveNetInspector(Checkpoint):
             if hasattr(model, 'set_mode'):
                 model.set_mode('sequence')
 
-            if self.net_inspector:
-                self.net_inspector.close()
-            self.net_inspector = self.vm.get_net_inspector(model, self.test_tensor)
+            #if self.net_inspector:
+            #    self.net_inspector.close()
+            #self.net_inspector = self.vm.get_net_inspector(model, self.test_tensor)
 
 
 class BatchSizeScheduler(MTCallback):
